@@ -387,7 +387,7 @@ exports.deleteUniversity = async (req, res) => {
 exports.getAllpartnersdata = async (req, res) => {
   try {
     const universities = await University.find({})
-      .select('universityName collegeUrl _id logo');
+      .select('universityName collegeUrl _id universityHomeImage logo');
 
       console.log(universities)
 
