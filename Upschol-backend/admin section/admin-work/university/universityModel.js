@@ -1,6 +1,5 @@
 const mongoose = require('mongoose');
 
-// Define the University Schema
 const universitySchema = new mongoose.Schema({
   universityName: { type: String, required: true },
   keywordDescription: { type: String },
@@ -8,20 +7,28 @@ const universitySchema = new mongoose.Schema({
   digitalInfrastructure: { type: Number },
   curriculum: { type: Number },
   valueForMoney: { type: Number },
-  isGlobalCollege: { type: Boolean, default: false },
-  isLocalCollege: { type: Boolean, default: false },
+  collegeType: { type: String, enum: ['global', 'local'] },
+  isDBA: { type: Boolean, default: false },
+  
+  // About Section
   aboutCollege: { type: String },
   startingKeyPoints: [{ type: String }],
   universityFacts: [{ fact: { type: String } }],
+  
+  // Media
   logo: { type: String, required: true },
   universityHomeImage: { type: String, required: true },
   sampleCertificate: { type: String },
   sampleCertificateDescription: { type: String },
+  
+  // Location
   universityAddress: { type: String },
   city: { type: String },
   pincode: { type: String },
   state: { type: String },
   country: { type: String },
+  
+  // Academics
   admissionProcess: { type: String },
   faqs: [{
     question: { type: String },
@@ -30,49 +37,85 @@ const universitySchema = new mongoose.Schema({
   examinationPatterns: [{ pattern: { type: String } }],
   advantages: [{
     description: { type: String },
-    benefits: [{ description: { type: String } }]
+    benefits: [{ type: String }]
   }],
+  
+  // SEO & URL
   collegeUrl: { 
     type: String,
-    lowercase: true
+    lowercase: true,
+    unique: true
   },
   keyword: { type: String },
+  
+  // Affiliations & Partners
   selectedApprovals: [{
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Approval'
+    _id: { type: mongoose.Schema.Types.ObjectId, ref: 'Approval' },
+    title: { type: String }
   }],
   selectedCompanies: [{
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Company'
+    _id: { type: mongoose.Schema.Types.ObjectId, ref: 'Company' },
+    title: { type: String }
   }],
-  selectedCourses: [{
-    courseId: { type: mongoose.Schema.Types.ObjectId, ref: 'AllCourse' },
-    semesterPrice: { type: Number },
-    annualPrice: { type: Number },
-    oneTimePrice: { type: Number },
-    totalAmount: { type: Number },
-    loanAmount: { type: Number }
+  
+  // Departments & Courses (NEW STRUCTURE)
+  selectedDepartments: [{
+    departmentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Department' },
+    departmentName: { type: String },
+    departmentContent: { type: String },
+    feeDetails: {
+      semesterFee: { type: Number, default: 0 },
+      annualFee: { type: Number, default: 0 },
+      oneTimeFee: { type: Number, default: 0 },
+      totalAmount: { type: Number, default: 0 },
+      loanAmount: { type: Number, default: 0 }
+    },
+    selectedCourses: [{
+      courseId: { type: mongoose.Schema.Types.ObjectId, ref: 'Course' },
+      courseName: { type: String },
+      courseContent: { type: String },
+      feeDetails: {
+        semesterFee: { type: Number, default: 0 },
+        annualFee: { type: Number, default: 0 },
+        oneTimeFee: { type: Number, default: 0 },
+        totalAmount: { type: Number, default: 0 },
+        loanAmount: { type: Number, default: 0 }
+      },
+      selectedSpecializations: [{
+        specializationId: { type: mongoose.Schema.Types.ObjectId, ref: 'Specialization' },
+        specializationName: { type: String }
+      }]
+    }]
   }],
-  Ranking : [{
-    type: mongoose.Schema.Types.ObjectId,
-    RatingNumber: { type: String},
-    RatingDescription : {type: String},
+  
+  // Rankings & Reviews
+  rankings: [{
+    RatingNumber: { type: String },
+    RatingDescription: { type: String }
   }],
-  Reviews : [{
-      type: mongoose.Schema.Types.ObjectId,
-      name: {type: String},
-      Rating : { type : Number},
-      description: {type : String},
+  reviews: [{
+    name: { type: String },
+    Rating: { type: Number, min: 1, max: 5 },
+    description: { type: String }
   }],
+  
+  // Financial Aid
+  financialAidContent: { type: String },
   financialOptions: [{
     category: { type: String },
     scholarshipCredit: { type: String },
     eligibilityDocuments: { type: String }
   }],
+  
+  // Timestamps
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
-}, { timestamps: true });
+}, { 
+  timestamps: true,
+  toJSON: { virtuals: true },
+  toObject: { virtuals: true }
+});
 
 // Create the University Model
 const University = mongoose.model('newUniversity', universitySchema);
-module.exports = University
+module.exports = University;

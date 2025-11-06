@@ -5,14 +5,21 @@ const CourseCategories = require('../course/model/courseModel');
 const AllCourse = require('../course/model/CourseCreateModel');
 const Company = require('../companydetails/companyModel');
 const AffiliatedInstitute = require('../approvals/approvaModell');
+const Department = require('../course/model/Department');
+const Approval = require('../approvals/approvaModell');
 
-// Helper function to parse JSON strings safely
+// Helper function to validate ObjectId
+const isValidObjectId = (id) => {
+  return mongoose.Types.ObjectId.isValid(id);
+};
+
+
 const parseJSON = (str) => {
   try {
     return JSON.parse(str);
   } catch (error) {
-    console.error(`Failed to parse JSON: ${str}`, error);
-    return [];
+    console.error('JSON Parse Error:', error.message);
+    return null;
   }
 };
 
@@ -20,6 +27,14 @@ exports.createUniversity = async (req) => {
   try {
     console.log("Received body:", req.body);
     console.log("Received files:", req.files);
+
+    // ✅ FIX: Parse the main data from req.body.data
+    const requestData = parseJSON(req.body.data);
+    if (!requestData) {
+      throw new Error('Invalid JSON data received');
+    }
+
+    console.log("Parsed requestData:", requestData);
 
     // Upload images to S3
     const logoPath = await uploadImage(req.files?.logo?.[0]);
@@ -30,16 +45,11 @@ exports.createUniversity = async (req) => {
       throw new Error('Logo and University Home Image are required.');
     }
 
-    // Destructure body
+    // ✅ FIX: Destructure from parsed requestData instead of req.body
     const {
       universityName,
       keywordDescription,
       universityRating,
-      digitalInfrastructure,
-      curriculum,
-      valueForMoney,
-      isGlobalCollege,
-      isLocalCollege,
       aboutCollege,
       startingKeyPoints,
       universityFacts,
@@ -50,114 +60,201 @@ exports.createUniversity = async (req) => {
       state,
       country,
       admissionProcess,
+      collegeUrl,
+      keyword,
+      collegeType,
+      isDBA,
       faqs,
       examinationPatterns,
       advantages,
-      collegeUrl,
-      keyword,
       rankings,
       reviews,
       selectedApprovals,
       selectedCompanies,
-      selectedCourses,
+      selectedDepartments,
+      financialAidContent,
       financialOptions
-    } = req.body;
+    } = requestData;
 
+    // Process departments data with proper validation
+    const processDepartments = (depts) => {
+      if (!depts || !Array.isArray(depts)) return [];
+      
+      return depts.map(dept => {
+        return {
+          departmentId: isValidObjectId(dept.departmentId) 
+            ? new mongoose.Types.ObjectId(dept.departmentId)
+            : new mongoose.Types.ObjectId(),
+          departmentName: dept.departmentName || 'Unknown Department',
+          departmentContent: dept.departmentContent || '',
+          feeDetails: {
+            semesterFee: parseFloat(dept.feeDetails?.semesterFee) || 0,
+            annualFee: parseFloat(dept.feeDetails?.annualFee) || 0,
+            oneTimeFee: parseFloat(dept.feeDetails?.oneTimeFee) || 0,
+            totalAmount: parseFloat(dept.feeDetails?.totalAmount) || 0,
+            loanAmount: parseFloat(dept.feeDetails?.loanAmount) || 0
+          },
+          selectedCourses: processCourses(dept.selectedCourses || [])
+        };
+      });
+    };
+
+    // Process courses data
+    const processCourses = (courses) => {
+      return courses.map(course => {
+        return {
+          courseId: isValidObjectId(course.courseId)
+            ? new mongoose.Types.ObjectId(course.courseId)
+            : new mongoose.Types.ObjectId(),
+          courseName: course.courseName || 'Unknown Course',
+          courseContent: course.courseContent || '',
+          feeDetails: {
+            semesterFee: parseFloat(course.feeDetails?.semesterFee) || 0,
+            annualFee: parseFloat(course.feeDetails?.annualFee) || 0,
+            oneTimeFee: parseFloat(course.feeDetails?.oneTimeFee) || 0,
+            totalAmount: parseFloat(course.feeDetails?.totalAmount) || 0,
+            loanAmount: parseFloat(course.feeDetails?.loanAmount) || 0
+          },
+          selectedSpecializations: processSpecializations(course.selectedSpecializations || [])
+        };
+      });
+    };
+
+    // Process specializations data
+    const processSpecializations = (specializations) => {
+      return specializations.map(spec => {
+        return {
+          specializationId: isValidObjectId(spec.specializationId)
+            ? new mongoose.Types.ObjectId(spec.specializationId)
+            : new mongoose.Types.ObjectId(),
+          specializationName: spec.specializationName || 'Unknown Specialization'
+        };
+      });
+    };
+
+    // Process approvals and companies
+    const processReferences = (items) => {
+      if (!items || !Array.isArray(items)) return [];
+      
+      return items.map(item => ({
+        _id: isValidObjectId(item._id) 
+          ? new mongoose.Types.ObjectId(item._id)
+          : new mongoose.Types.ObjectId(),
+        title: item.title || 'Unknown'
+      }));
+    };
+
+    // Helper function to validate ObjectId
+    const isValidObjectId = (id) => {
+      return mongoose.Types.ObjectId.isValid(id);
+    };
+
+    // ✅ FIX: Now use the actual data from requestData
     const universityData = {
-      universityName,
-      keywordDescription,
-      universityRating: parseFloat(universityRating) || 0,
-      digitalInfrastructure: parseFloat(digitalInfrastructure) || 0,
-      curriculum: parseFloat(curriculum) || 0,
-      valueForMoney: parseFloat(valueForMoney) || 0,
-      isGlobalCollege: isGlobalCollege === 'true' || isGlobalCollege === true,
-      isLocalCollege: isLocalCollege === 'true' || isLocalCollege === true,
-      aboutCollege,
-      startingKeyPoints: typeof startingKeyPoints === 'string' ? parseJSON(startingKeyPoints) : startingKeyPoints || [],
-      universityFacts: typeof universityFacts === 'string'
-        ? parseJSON(universityFacts).map(f => ({ fact: f.fact }))
-        : universityFacts || [],
+      // Basic Information
+      universityName: universityName || 'Unknown University',
+      keywordDescription: keywordDescription || '',
+      universityRating: Math.min(5, Math.max(0, parseFloat(universityRating) || 0)),
+      collegeType: collegeType || 'local',
+      isDBA: isDBA === 'true' || isDBA === true,
+      
+      // About Section
+      aboutCollege: aboutCollege || '',
+      startingKeyPoints: Array.isArray(startingKeyPoints) 
+        ? startingKeyPoints 
+        : [],
+      
+      universityFacts: Array.isArray(universityFacts)
+        ? universityFacts
+        : [],
+      
+      // Media
       logo: logoPath.Location,
       universityHomeImage: homeImagePath.Location,
-      sampleCertificate: certificatePath?.Location || null,
-      sampleCertificateDescription,
-      universityAddress,
-      city,
-      pincode,
-      state,
-      country,
-      admissionProcess,
-      faqs: typeof faqs === 'string' ? parseJSON(faqs) : faqs || [],
-      examinationPatterns: typeof examinationPatterns === 'string'
-        ? parseJSON(examinationPatterns)
-        : examinationPatterns || [],
-      advantages: typeof advantages === 'string'
-        ? parseJSON(advantages).map(adv => ({
-            description: adv.description,
-            benefits: Array.isArray(adv.benefits)
-              ? adv.benefits.map(b => ({ description: b }))
-              : []
+      sampleCertificate: certificatePath?.Location || '',
+      sampleCertificateDescription: sampleCertificateDescription || '',
+      
+      // Location
+      universityAddress: universityAddress || '',
+      city: city || '',
+      pincode: pincode || '',
+      state: state || '',
+      country: country || '',
+      
+      // Academics
+      admissionProcess: admissionProcess || '',
+      faqs: Array.isArray(faqs) ? faqs : [],
+      
+      examinationPatterns: Array.isArray(examinationPatterns)
+        ? examinationPatterns
+        : [],
+      
+      advantages: Array.isArray(advantages)
+        ? advantages
+        : [],
+      
+      // SEO & URL - Use actual collegeUrl from data or generate from name
+      collegeUrl: (collegeUrl || universityName || 'unknown-university')
+        .toLowerCase()
+        .replace(/\s+/g, '-')
+        .replace(/[^a-z0-9-]/g, ''),
+      keyword: keyword || '',
+      
+      // Affiliations & Partners
+      selectedApprovals: processReferences(
+        Array.isArray(selectedApprovals) ? selectedApprovals : []
+      ),
+      
+      selectedCompanies: processReferences(
+        Array.isArray(selectedCompanies) ? selectedCompanies : []
+      ),
+      
+      // Departments & Courses
+      selectedDepartments: processDepartments(
+        Array.isArray(selectedDepartments) ? selectedDepartments : []
+      ),
+      
+      // Rankings & Reviews
+      rankings: Array.isArray(rankings) ? rankings : [],
+      
+      reviews: Array.isArray(reviews)
+        ? reviews.map(rev => ({
+            name: rev.name || 'Anonymous',
+            Rating: Math.min(5, Math.max(1, parseInt(rev.Rating) || 3)),
+            description: rev.description || ''
           }))
-        : advantages || [],
-      rankings: typeof rankings == 'string'
-        ? parseJSON(rankings).map(rank => ({
-            RatingNumber: rank.RatingNumber,
-            RatingDescription: rank.RatingDescription,
-          }))
-        : rankings || [],
-      reviews: typeof reviews == 'string'
-        ? parseJSON(reviews).map(rev => ({
-            name: rev.name,
-            Rating: rev.Rating,
-            description: rev.description   
-          }))
-        : rankings || [],
-      collegeUrl,
-      keyword,
-      selectedApprovals: typeof selectedApprovals === 'string'
-        ? parseJSON(selectedApprovals).map(id => new mongoose.Types.ObjectId(id)
-)
-        : selectedApprovals || [],
-      selectedCompanies: typeof selectedCompanies === 'string'
-        ? parseJSON(selectedCompanies).map(id => new mongoose.Types.ObjectId(id)
-)
-        : selectedCompanies || [],
-      selectedCourses: typeof selectedCourses === 'string'
-        ? parseJSON(selectedCourses).map(course => ({
-            courseId: new mongoose.Types.ObjectId(course.courseId),
-            semesterPrice: parseFloat(course.semesterPrice),
-            annualPrice: parseFloat(course.annualPrice),
-            oneTimePrice: parseFloat(course.oneTimePrice),
-            totalAmount: parseFloat(course.totalAmount),
-            loanAmount: parseFloat(course.loanAmount)
-          }))
-        : selectedCourses || [],
-      financialOptions: typeof financialOptions === 'string'
-        ? parseJSON(financialOptions)
-        : financialOptions || []
+        : [],
+      
+      // Financial Aid
+      financialAidContent: financialAidContent || '',
+      financialOptions: Array.isArray(financialOptions) ? financialOptions : []
     };
 
     console.log("Prepared universityData:", JSON.stringify(universityData, null, 2));
 
-    const universities = new University(universityData);
-    
-    try {
-      const savedUniversity = await universities.save();
-      return {
-        message: 'University created successfully',
-        data: savedUniversity
-      };
-    } catch (err) {
-      console.error("Error while saving university:", err);
-      throw err;
+    // Check if university with same URL already exists
+    const existingUniversity = await University.findOne({ collegeUrl: universityData.collegeUrl });
+    if (existingUniversity) {
+      throw new Error('University with this URL already exists');
     }
+
+    const university = new University(universityData);
+    
+    const savedUniversity = await university.save();
+    
+    return {
+      success: true,
+      message: 'University created successfully',
+      data: savedUniversity,
+      totalDepartments: savedUniversity.selectedDepartments.length,
+      totalCourses: savedUniversity
+    };
 
   } catch (error) {
     console.error("CREATE UNIVERSITY ERROR:", error.message, error);
     throw error;
   }
 };
-
 
 // Get All Universities (with pagination)
 exports.getAllUniversities = async (req, res) => {
@@ -290,7 +387,9 @@ exports.deleteUniversity = async (req, res) => {
 exports.getAllpartnersdata = async (req, res) => {
   try {
     const universities = await University.find({})
-      .select('universityName collegeUrl universityHomeImage keywordDescription _id selectedCourses logo');
+      .select('universityName collegeUrl _id logo');
+
+      console.log(universities)
 
     return {
       message: "All University Data Fetched Successfully",
@@ -311,47 +410,90 @@ exports.getUniversityBycollegeUrl = async (collegeUrl) => {
       throw new Error('University not found');
     }
 
-    // Step 2: Extract all IDs needed for population
-    const courseIds = university.selectedCourses.map(c => c.courseId);
-    const affiliatedIds = university.selectedApprovals;
-    const companyIds = university.selectedCompanies;
+    // Step 2: Extract all IDs from the NEW schema structure
+    const courseIds = [];
+    const specializationIds = [];
+    const approvalIds = university.selectedApprovals.map(approval => approval._id);
+    const companyIds = university.selectedCompanies.map(company => company._id);
+
+    // Get all course and specialization IDs from departments
+    university.selectedDepartments.forEach(dept => {
+      dept.selectedCourses.forEach(course => {
+        courseIds.push(course.courseId);
+        course.selectedSpecializations.forEach(spec => {
+          specializationIds.push(spec.specializationId);
+        });
+      });
+    });
 
     // Step 3: Get all related data in parallel
-    const [courses, affiliatedInstitutes, companies] = await Promise.all([
+    const [courses, specializations, approvals, companies] = await Promise.all([
       AllCourse.find({ _id: { $in: courseIds } }),
-      AffiliatedInstitute.find({ _id: { $in: affiliatedIds } }),
+      Department.find({ _id: { $in: specializationIds } }),
+      Approval.find({ _id: { $in: approvalIds } }), // Change to Approval model
       Company.find({ _id: { $in: companyIds } })
     ]);
 
-    // Step 4: Enrich the course data with pricing information
-    const enrichedCourses = university.selectedCourses.map(univCourse => {
-      const courseDetail = courses.find(c => c._id.equals(univCourse.courseId));
-      
+    // Step 4: Enrich departments with course and specialization details
+    const enrichedDepartments = university.selectedDepartments.map(dept => {
+      const enrichedCourses = dept.selectedCourses.map(course => {
+        // Find course details
+        const courseDetail = courses.find(c => c._id.toString() === course.courseId.toString());
+        
+        // Find specialization details
+        const enrichedSpecializations = course.selectedSpecializations.map(spec => {
+          const specDetail = specializations.find(s => s._id.toString() === spec.specializationId.toString());
+          return {
+            ...spec.toObject(),
+            ...(specDetail ? specDetail.toObject() : {})
+          };
+        });
+
+        return {
+          ...course.toObject(),
+          ...(courseDetail ? courseDetail.toObject() : {}),
+          selectedSpecializations: enrichedSpecializations
+        };
+      });
+
       return {
-        ...courseDetail.toObject(),
-        pricing: {
-          semesterPrice: univCourse.semesterPrice,
-          annualPrice: univCourse.annualPrice,
-          oneTimePrice: univCourse.oneTimePrice,
-          totalAmount: univCourse.totalAmount,
-          loanAmount: univCourse.loanAmount
-        }
+        ...dept.toObject(),
+        selectedCourses: enrichedCourses
       };
     });
 
-    // Step 5: Prepare final response
+    // Step 5: Enrich approvals and companies
+    const enrichedApprovals = university.selectedApprovals.map(approval => {
+      const approvalDetail = approvals.find(a => a._id.toString() === approval._id.toString());
+      return {
+        ...approval.toObject(),
+        ...(approvalDetail ? approvalDetail.toObject() : {})
+      };
+    });
+
+    const enrichedCompanies = university.selectedCompanies.map(company => {
+      const companyDetail = companies.find(c => c._id.toString() === company._id.toString());
+      return {
+        ...company.toObject(),
+        ...(companyDetail ? companyDetail.toObject() : {})
+      };
+    });
+
+    // Step 6: Prepare final response
     const responseData = {
       ...university.toObject(),
-      selectedCourses: enrichedCourses,
-      selectedApprovals: affiliatedInstitutes,
-      selectedCompanies: companies
+      selectedDepartments: enrichedDepartments,
+      selectedApprovals: enrichedApprovals,
+      selectedCompanies: enrichedCompanies
     };
 
     return {
+      success: true,
       message: "University data fetched successfully",
       data: responseData
     };
   } catch (error) {
+    console.error("GET UNIVERSITY ERROR:", error.message);
     throw new Error(error.message);
   }
 };

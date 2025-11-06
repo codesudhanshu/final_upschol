@@ -1,3 +1,9 @@
+const { sendEnquiryNotification, sendEnquiryNotificationamity, sendEnquiryNotificationmaninmims } = require("../../mailer/nodemailer")
+const amityModel = require("./models/amityModel")
+const lpuModel = require("./models/lpuModel")
+const manipalModel = require("./models/manipalModel")
+const nmimsModel = require("./models/nmimsModel")
+
 const Leads = require("./models/LeadsModels");
 
 exports.LeadsAdd = async (body) => {
@@ -29,6 +35,112 @@ exports.LeadsAdd = async (body) => {
   }
 };
 
+exports.createLPUEnquiry = async (body) => {
+  try {
+    const { name, email, phoneNumber, course, location } = body;
+
+    if (!name || !email || !phoneNumber || !course || !location) {
+      throw new Error('All fields are required');
+    }
+
+    const newEntry = new lpuModel({
+      name,
+      email,
+      phoneNumber,
+      course,
+      location
+    });
+
+    const college = "Lovely Professional University";
+    await newEntry.save();
+    await sendEnquiryNotification({ name, email, phoneNumber, college, course, location });
+    
+    return { message: 'Data saved successfully', result: newEntry };
+  } catch (error) {
+    console.error("Error creating enquiry", error);
+    throw new Error("Failed to create enquiry");
+  }
+};
+
+exports.createAmityEnquiry = async (body) => {
+  try {
+    const { first_name, last_name, email, phoneNumber, course, location } = body;
+
+    if (!first_name || !last_name || !email || !phoneNumber || !course || !location) {
+      throw new Error('All fields are required');
+    }
+
+    const newEntry = new amityModel({
+      first_name,
+      last_name,
+      email,
+      phoneNumber,
+      course,
+      location
+    });
+
+    const college = "Amity University";
+    await newEntry.save();
+    await sendEnquiryNotificationamity({ first_name, last_name, email, phoneNumber, course, college, location });
+    
+    return { message: 'Data saved successfully', result: newEntry };
+  } catch (error) {
+    console.error("Error creating enquiry", error);
+    throw new Error("Failed to create enquiry");
+  }
+};
+
+exports.createManipalEnquiry = async (body) => {
+  try {
+    const { name, email, phoneNumber, location } = body;
+
+    if (!name || !email || !phoneNumber || !location) {
+      throw new Error('All fields are required');
+    }
+
+    const newEntry = new manipalModel({
+      name,
+      email,
+      phoneNumber,
+      location
+    });
+
+    const college = "Manipal University";
+    await newEntry.save();
+    await sendEnquiryNotificationmaninmims({ name, email, phoneNumber, college, location });
+    
+    return { message: 'Data saved successfully', result: newEntry };
+  } catch (error) {
+    console.error("Error creating enquiry", error);
+    throw new Error("Failed to create enquiry");
+  }
+};
+
+exports.createNMIMSEnquiry = async (body) => {
+  try {
+    const { name, email, phoneNumber, location } = body;
+
+    if (!name || !email || !phoneNumber || !location) {
+      throw new Error('All fields are required');
+    }
+
+    const newEntry = new nmimsModel({
+      name,
+      email,
+      phoneNumber,
+      location
+    });
+
+    const college = "NMIMS University";
+    await newEntry.save();
+    await sendEnquiryNotificationmaninmims({ name, email, phoneNumber, college, location });
+    
+    return { message: 'Data saved successfully', result: newEntry };
+  } catch (error) {
+    console.error("Error creating enquiry", error);
+    throw new Error("Failed to create enquiry");
+  }
+};
 
 
 exports.LeadsDetails = async (req) => {

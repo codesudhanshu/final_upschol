@@ -121,43 +121,75 @@ exports.getAllannouncementsData = async () => {
 exports.searchUniversities = async (req) => {
   try {
     const { categoryId, courseId } = req.query;
-    let courseFilter = {};
-    if (categoryId) courseFilter.courseCategory = categoryId;
-    if (courseId) courseFilter._id = courseId;
+    
+    let universities = [];
 
-    const courses = await AllCourse.find(courseFilter);
+    // If filters are provided
+    if (categoryId || courseId) {
+      let courseFilter = {};
+      
+      if (categoryId && categoryId.trim() !== '') {
+        courseFilter.courseCategory = categoryId;
+      }
+      if (courseId && courseId.trim() !== '') {
+        courseFilter._id = courseId;
+      }
 
-    // If no courses found, return empty array
-    if (courses.length === 0) return [];
+      const courses = await AllCourse.find(courseFilter);
+      
+      if (courses.length === 0) return [];
+      
+      const courseIds = courses.map(c => c._id);
+      universities = await University.find({
+        'selectedCourses.courseId': { $in: courseIds }
+      });
+    } else {
+      universities = await University.find({});
+    }
 
-    // Step 2: Get all universities that offer these courses
-    const courseIds = courses.map(c => c._id);
-    const universities = await University.find({
-      'selectedCourses.courseId': { $in: courseIds }
+    if (universities.length === 0) return [];
+
+    // Get all affiliated institutes first (without filtering)
+    const allAffiliatedInstitutes = await AffiliatedInstitute.find({}, { title: 1 });
+    
+    // Create a map for quick lookup
+    const affiliatedMap = {};
+    allAffiliatedInstitutes.forEach(inst => {
+      affiliatedMap[inst._id.toString()] = inst.title;
     });
 
-    // Step 3: Get affiliated institutes for these universities
-    const affiliatedIds = universities.flatMap(u => u.selectedApprovals);
-    const affiliatedInstitutes = await AffiliatedInstitute.find(
-      { _id: { $in: affiliatedIds } },
-      { title: 1 } // Only return title field
-    );
-
-    // Step 4: Prepare response with limited fields
+    // Prepare response
     const response = universities.map(university => {
-      // Find affiliated institutes for this university
-      const universityAffiliated = affiliatedInstitutes.filter(inst =>
-        university.selectedApprovals.includes(inst._id)
-      );
+      const universityAffiliatedNames = university.selectedApprovals
+        .map(approval => {
+          try {
+            // Try different ways to extract the ID
+            let approvalId;
+            
+            if (approval && approval._id) {
+              approvalId = approval._id;
+            } else if (approval && approval.id) {
+              approvalId = approval.id;
+            } else {
+              approvalId = approval;
+            }
+            
+            return affiliatedMap[approvalId.toString()];
+          } catch (err) {
+            console.log("Error mapping approval:", approval);
+            return null;
+          }
+        })
+        .filter(name => name);
 
       return {
         _id: university._id,
         title: university.universityName,
         logo: university.logo,
         bannerImage: university.universityHomeImage,
-        affiliatedInstitutes: universityAffiliated,
+        affiliatedInstitutes: universityAffiliatedNames,
         rating: university.universityRating,
-        universityurl : university.collegeUrl
+        universityurl: university.collegeUrl
       };
     });
 
