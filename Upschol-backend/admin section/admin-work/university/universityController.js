@@ -50,6 +50,10 @@ exports.createUniversity = async (req) => {
       universityName,
       keywordDescription,
       universityRating,
+      valueForMoney,
+      curriculum,
+      digitalInfrastructure,
+      averageRating,
       aboutCollege,
       startingKeyPoints,
       universityFacts,
@@ -155,6 +159,10 @@ exports.createUniversity = async (req) => {
       universityName: universityName || 'Unknown University',
       keywordDescription: keywordDescription || '',
       universityRating: Math.min(5, Math.max(0, parseFloat(universityRating) || 0)),
+      valueForMoney: Math.min(5, Math.max(0, parseFloat(valueForMoney) || 0)),
+      curriculum: Math.min(5, Math.max(0, parseFloat(curriculum) || 0)),
+      digitalInfrastructure: Math.min(5, Math.max(0, parseFloat(digitalInfrastructure) || 0)),
+      averageRating: Math.min(5, Math.max(0, parseFloat(averageRating) || 0)),
       collegeType: collegeType || 'local',
       isDBA: isDBA === 'true' || isDBA === true,
       
@@ -257,19 +265,38 @@ exports.createUniversity = async (req) => {
 };
 
 // Get All Universities (with pagination)
-exports.getAllUniversities = async (req, res) => {
+exports.getAllUniversities = async (query) => {
   try {
-    const { page = 1, limit = 10 } = req.query;
-    const universities = await University.find()
-      .populate('selectedApprovals')
-      .populate('selectedCompanies')
-      .populate('selectedCourses.courseId')
-      .skip((page - 1) * limit)
+    const { page = 1, limit = 10, search = '' } = query;
+    const skip = (page - 1) * limit;
+    
+    // Build search filter
+    let filter = {};
+    if (search) {
+      filter = {
+        $or: [
+          { universityName: { $regex: search, $options: 'i' } },
+          { aboutCollege: { $regex: search, $options: 'i' } }
+        ]
+      };
+    }
+
+    // Get universities with pagination
+    const universities = await University.find(filter)
+      .select('universityName logo aboutCollege createdAt')
+      .sort({ createdAt: -1 })
+      .skip(skip)
       .limit(parseInt(limit));
 
+    // Get total count for pagination
+    const total = await University.countDocuments(filter);
+
     return {
-        message: "All Univeristy Data Fetched SuccessFully",
+      message: "All University Data Fetched Successfully",
       count: universities.length,
+      total,
+      page: parseInt(page),
+      pages: Math.ceil(total / limit),
       data: universities
     };
   } catch (error) {
@@ -277,13 +304,11 @@ exports.getAllUniversities = async (req, res) => {
   }
 };
 
+
 // Get Single University
-exports.getUniversityById = async (req, res) => {
+exports.getUniversityById = async (id) => {
   try {
-    const university = await University.findById(req.params.id)
-      .populate('selectedApprovals')
-      .populate('selectedCompanies')
-      .populate('selectedCourses.courseId');
+    const university = await University.findById(id)
 
     if (!university) {
       return res.status(404).json({
@@ -302,80 +327,88 @@ exports.getUniversityById = async (req, res) => {
 };
 
 // Update University
-exports.updateUniversity = async (req, res) => {
+exports.updateUniversity = async (req) => {
   try {
-    const university = await University.findById(req.params.id);
+    const { id } = req.params;
+    const university = await University.findById(id);
+    
     if (!university) {
-      return res.status(404).json({
-        success: false,
-        message: 'University not found'
-      });
+      throw new Error('University not found');
     }
-
-    // Handle file uploads
-    const logoPath = req.files?.logo?.[0] 
-      ? uploadImage(req.files.logo[0]) 
-      : null;
-    const homeImagePath = req.files?.universityHomeImage?.[0]
-      ? uploadImage(req.files.universityHomeImage[0])
-      : null;
-    const certificatePath = req.files?.sampleCertificate?.[0]
-      ? uploadImage(req.files.sampleCertificate[0])
-      : null;
 
     // Parse form data
-    const formData = JSON.parse(req.body.formData || '{}');
+    let formData = {};
+    if (req.body.data) {
+      formData = JSON.parse(req.body.data);
+    }
 
-    // Update fields
-    Object.keys(formData).forEach(key => {
-      university[key] = formData[key];
-    });
+    console.log('Received form data:', formData);
 
-    // Update files if new ones are uploaded
-    if (logoPath) {
-      deleteFile(university.logo);
+    // Handle file uploads
+    if (req.files?.logo?.[0]) {
+      const logoPath = uploadImage(req.files.logo[0]);
+      if (university.logo) {
+        deleteFile(university.logo);
+      }
       university.logo = logoPath;
     }
-    if (homeImagePath) {
-      deleteFile(university.universityHomeImage);
+
+    if (req.files?.universityHomeImage?.[0]) {
+      const homeImagePath = uploadImage(req.files.universityHomeImage[0]);
+      if (university.universityHomeImage) {
+        deleteFile(university.universityHomeImage);
+      }
       university.universityHomeImage = homeImagePath;
     }
-    if (certificatePath) {
-      deleteFile(university.sampleCertificate);
+
+    if (req.files?.sampleCertificate?.[0]) {
+      const certificatePath = uploadImage(req.files.sampleCertificate[0]);
+      if (university.sampleCertificate) {
+        deleteFile(university.sampleCertificate);
+      }
       university.sampleCertificate = certificatePath;
     }
+
+    // Update all fields from formData
+    Object.keys(formData).forEach(key => {
+      if (formData[key] !== undefined && formData[key] !== null) {
+        // Handle arrays and objects properly
+        if (Array.isArray(formData[key])) {
+          university[key] = formData[key];
+        } else if (typeof formData[key] === 'object' && formData[key] !== null) {
+          university[key] = { ...university[key], ...formData[key] };
+        } else {
+          university[key] = formData[key];
+        }
+      }
+    });
+
+    university.updatedAt = new Date();
 
     await university.save();
 
     return {
       message: 'University updated successfully',
       data: university
-    }
+    };
 
   } catch (error) {
+    console.error('Update error:', error);
     throw new Error(error.message);
   }
 };
 
 // Delete University
-exports.deleteUniversity = async (req, res) => {
+exports.deleteUniversity = async (id) => {
   try {
-    const university = await University.findByIdAndDelete(req.params.id);
+    const university = await University.findByIdAndDelete(id);
     if (!university) {
-      return res.status(404).json({
-        success: false,
-        message: 'University not found'
-      });
+      throw new Error('University not found');
     }
-
-    // Delete associated files
-    deleteFile(university.logo);
-    deleteFile(university.universityHomeImage);
-    deleteFile(university.sampleCertificate);
-
     return {
-      message: 'University deleted successfully'
-    }
+      message: "University deleted successfully",
+      data: university
+    };
   } catch (error) {
     throw new Error(error.message);
   }

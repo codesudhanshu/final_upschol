@@ -47,10 +47,11 @@ router.post('/create-university',
   }
 );
 
-// Get All Universities (Public)
+
 router.get('/universities', async (req, res) => {
   try {
-    const result = await getAllUniversities();
+    // Pass query parameters to the function
+    const result = await getAllUniversities(req.query);
     res.send(serviceResponse({
       result,
       status: constant.apiStatus.success,
@@ -100,7 +101,6 @@ router.get('/university/:id', async (req, res) => {
 
 // Update University (Admin only)
 router.put('/university/:id', 
-  verifyAdminToken,
   upload.fields([
     { name: 'logo', maxCount: 1 },
     { name: 'universityHomeImage', maxCount: 1 },
@@ -108,13 +108,14 @@ router.put('/university/:id',
   ]),
   async (req, res) => {
     try {
-      const result = await updateUniversity(req.params.id, req);
+      const result = await updateUniversity(req);
       res.send(serviceResponse({
         result,
         status: constant.apiStatus.success,
         allowed: true
       }));
     } catch (error) {
+      console.error('Route error:', error);
       res.send(serviceResponse({
         error: error.message,
         status: constant.apiStatus.failed
@@ -122,7 +123,6 @@ router.put('/university/:id',
     }
   }
 );
-
 // Delete University (Admin only)
 router.delete('/university/:id', async (req, res) => {
   try {

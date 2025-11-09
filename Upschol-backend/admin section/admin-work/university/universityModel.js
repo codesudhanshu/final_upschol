@@ -4,9 +4,10 @@ const universitySchema = new mongoose.Schema({
   universityName: { type: String, required: true },
   keywordDescription: { type: String },
   universityRating: { type: Number, default: 0 },
-  digitalInfrastructure: { type: Number },
-  curriculum: { type: Number },
-  valueForMoney: { type: Number },
+  averageRating: {type: Number, default: 0 },
+  digitalInfrastructure: { type: Number , default: 0},
+  curriculum: { type: Number, default: 0 },
+  valueForMoney: { type: Number, default: 0 },
   collegeType: { type: String, enum: ['global', 'local'] },
   isDBA: { type: Boolean, default: false },
   
