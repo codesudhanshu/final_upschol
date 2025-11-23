@@ -24,7 +24,6 @@ exports.getAllcity = async (id) => {
 
 
 exports.freecounsellingadd = async (body) => {
-  console.log(body)
   try {
     const freecounsellings = new freecounselling({
       name: body.name,

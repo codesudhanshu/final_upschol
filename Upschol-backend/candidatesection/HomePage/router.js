@@ -145,7 +145,12 @@ router.get('/search-universities', async (req, res) => {
   try {
     const result = await searchUniversities(req);
     res.send(serviceResponse({
-      result,
+      result: {
+        universities: result.universities,
+        totalPages: result.totalPages,
+        currentPage: result.currentPage,
+        totalUniversities: result.totalUniversities
+      },
       status: constant.apiStatus.success,
       allowed: true
     }));

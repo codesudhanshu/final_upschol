@@ -33,8 +33,6 @@ exports.createblog = async (req) => {
     let content = req.body.content;
     const contentImageUrls = [];
     
-    console.log('Files received:', req.files);
-    console.log('Body received:', req.body);
 
     if (req.files?.images) {
       const contentImages = Array.isArray(req.files.images) ? req.files.images : [req.files.images];
@@ -42,19 +40,16 @@ exports.createblog = async (req) => {
       const altTexts = req.body.altTexts ? (Array.isArray(req.body.altTexts) ? req.body.altTexts : [req.body.altTexts]) : [];
       const imageDescriptions = req.body.imageDescriptions ? (Array.isArray(req.body.imageDescriptions) ? req.body.imageDescriptions : [req.body.imageDescriptions]) : [];
 
-      console.log('Processing images:', contentImages.length);
-
       for (let i = 0; i < contentImages.length; i++) {
         const file = contentImages[i];
         const tempId = tempIds[i] || `temp-image-${i}`;
         const altText = altTexts[i] || '';
         const imageDesc = imageDescriptions[i] || '';
 
-        console.log(`Uploading image ${i + 1}:`, file.originalname);
+     
         
         try {
           const result = await uploadImage(file);
-          console.log('Image uploaded to S3:', result.Location);
 
           // Store image info as object
           const imageInfo = {
@@ -72,7 +67,6 @@ exports.createblog = async (req) => {
           const tempImgRegex = new RegExp(`<img[^>]*data-temp-id="${tempId}"[^>]*>`, 'g');
           if (tempImgRegex.test(content)) {
             content = content.replace(tempImgRegex, actualImgTag);
-            console.log('Replaced image by temp ID');
           } else {
             // Fallback: replace blob URLs
             const blobUrlRegex = /blob:http:\/\/localhost:3000\/[a-f0-9-]+/g;
@@ -102,9 +96,6 @@ exports.createblog = async (req) => {
       }
     }
 
-    console.log('Final content:', content);
-    console.log('Content images to save:', contentImageUrls);
-
     // Create blog with proper contentImages structure
     const blogData1 = {
       title: req.body.title.trim(),
@@ -116,12 +107,10 @@ exports.createblog = async (req) => {
       createdBy: req.user?.id || 'Upschol'
     };
 
-    console.log('blog data to save:', blogData1);
 
     const blog = new blogData(blogData1);
     await blog.save();
     
-    console.log('blog saved successfully');
     return { message: 'blog created successfully', blog };
   } catch (error) {
     console.error('Error in createblog:', error);
@@ -195,7 +184,6 @@ exports.getblogByUrl = async (url) => {
 
 exports.getblogById = async (id) => {
   try {
-    console.log(id, "id")
     const blog = await blogData.findById(id);
     if (!blog) {
       throw new Error('blog not found');

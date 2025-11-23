@@ -15,7 +15,6 @@ const constant = require('../../../constant');
 // Create announcement
 router.post('/create-announcement', async (req, res) => {
   try {
-    console.log(req.body)
     const result = await createannouncement(req);
     res.send(serviceResponse({
       result,

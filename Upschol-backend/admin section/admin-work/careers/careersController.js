@@ -97,10 +97,6 @@ exports.applyForJob = async (req) => {
     const { jobId } = req.params; // ✅ Yeh ab access hoga
     const { name, email, mobile_number, job_position, description } = req.body;
 
-    console.log('Job ID from params:', jobId);
-    console.log('Request body:', req.body);
-    console.log('Request files:', req.files);
-
     // Check if job exists and is active
     const job = await Job.findById(jobId);
     if (!job) {

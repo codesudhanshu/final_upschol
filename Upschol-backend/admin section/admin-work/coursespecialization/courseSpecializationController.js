@@ -31,9 +31,6 @@ exports.createspecialization = async (req) => {
     // Process content images
     let content = req.body.content;
     const contentImageUrls = [];
-    
-    console.log('Files received:', req.files);
-    console.log('Body received:', req.body);
 
     if (req.files?.images) {
       const contentImages = Array.isArray(req.files.images) ? req.files.images : [req.files.images];
@@ -41,19 +38,14 @@ exports.createspecialization = async (req) => {
       const altTexts = req.body.altTexts ? (Array.isArray(req.body.altTexts) ? req.body.altTexts : [req.body.altTexts]) : [];
       const imageDescriptions = req.body.imageDescriptions ? (Array.isArray(req.body.imageDescriptions) ? req.body.imageDescriptions : [req.body.imageDescriptions]) : [];
 
-      console.log('Processing images:', contentImages.length);
-
       for (let i = 0; i < contentImages.length; i++) {
         const file = contentImages[i];
         const tempId = tempIds[i] || `temp-image-${i}`;
         const altText = altTexts[i] || '';
         const imageDesc = imageDescriptions[i] || '';
-
-        console.log(`Uploading image ${i + 1}:`, file.originalname);
         
         try {
           const result = await uploadImage(file);
-          console.log('Image uploaded to S3:', result.Location);
 
           // Store image info as object
           const imageInfo = {
@@ -71,7 +63,6 @@ exports.createspecialization = async (req) => {
           const tempImgRegex = new RegExp(`<img[^>]*data-temp-id="${tempId}"[^>]*>`, 'g');
           if (tempImgRegex.test(content)) {
             content = content.replace(tempImgRegex, actualImgTag);
-            console.log('Replaced image by temp ID');
           } else {
             // Fallback: replace blob URLs
             const blobUrlRegex = /blob:http:\/\/localhost:3000\/[a-f0-9-]+/g;
@@ -101,9 +92,6 @@ exports.createspecialization = async (req) => {
       }
     }
 
-    console.log('Final content:', content);
-    console.log('Content images to save:', contentImageUrls);
-
     // Create specialization with proper contentImages structure
     const specializationData1 = {
       title: req.body.title.trim(),
@@ -115,12 +103,9 @@ exports.createspecialization = async (req) => {
       createdBy: req.user?.id || 'Upschol'
     };
 
-    console.log('specialization data to save:', specializationData1);
-
     const specialization = new specializationData(specializationData1);
     await specialization.save();
     
-    console.log('specialization saved successfully');
     return { message: 'specialization created successfully', specialization };
   } catch (error) {
     console.error('Error in createspecialization:', error);

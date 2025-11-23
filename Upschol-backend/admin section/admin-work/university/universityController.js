@@ -25,16 +25,12 @@ const parseJSON = (str) => {
 
 exports.createUniversity = async (req) => {
   try {
-    console.log("Received body:", req.body);
-    console.log("Received files:", req.files);
 
     // ✅ FIX: Parse the main data from req.body.data
     const requestData = parseJSON(req.body.data);
     if (!requestData) {
       throw new Error('Invalid JSON data received');
     }
-
-    console.log("Parsed requestData:", requestData);
 
     // Upload images to S3
     const logoPath = await uploadImage(req.files?.logo?.[0]);
@@ -238,7 +234,6 @@ exports.createUniversity = async (req) => {
       financialOptions: Array.isArray(financialOptions) ? financialOptions : []
     };
 
-    console.log("Prepared universityData:", JSON.stringify(universityData, null, 2));
 
     // Check if university with same URL already exists
     const existingUniversity = await University.findOne({ collegeUrl: universityData.collegeUrl });
@@ -342,8 +337,6 @@ exports.updateUniversity = async (req) => {
       formData = JSON.parse(req.body.data);
     }
 
-    console.log('Received form data:', formData);
-
     // Handle file uploads
     if (req.files?.logo?.[0]) {
       const logoPath = uploadImage(req.files.logo[0]);
@@ -421,8 +414,6 @@ exports.getAllpartnersdata = async (req, res) => {
   try {
     const universities = await University.find({})
       .select('universityName collegeUrl _id universityHomeImage logo');
-
-      console.log(universities)
 
     return {
       message: "All University Data Fetched Successfully",
@@ -536,7 +527,7 @@ exports.getUniversityBycollegeUrl = async (collegeUrl) => {
 
 exports.getMultipleUniversitiesData = async (collegeUrl) => {
   try {
-    console.log(collegeUrl)
+
     if (!collegeUrl) {
       return { error: 'College URLs are required' }
     }
@@ -558,38 +549,64 @@ exports.getMultipleUniversitiesData = async (collegeUrl) => {
           return { error: `University not found for URL: ${collegeUrl}` };
         }
 
-        // Step 2: Extract all IDs needed for population
-        const courseIds = university.selectedCourses.map(c => c.courseId);
-        const affiliatedIds = university.selectedApprovals;
-        const companyIds = university.selectedCompanies;
+        // Step 2: Extract all course IDs from selectedDepartments
+        const courseIds = [];
+        const departmentIds = [];
+        
+        if (university.selectedDepartments && university.selectedDepartments.length > 0) {
+          university.selectedDepartments.forEach(department => {
+            departmentIds.push(department.departmentId);
+            if (department.selectedCourses && department.selectedCourses.length > 0) {
+              department.selectedCourses.forEach(course => {
+                courseIds.push(course.courseId);
+              });
+            }
+          });
+        }
+
+        // Extract other IDs
+        const affiliatedIds = university.selectedApprovals || [];
+        const companyIds = university.selectedCompanies || [];
 
         // Step 3: Get all related data in parallel
-        const [courses, affiliatedInstitutes, companies] = await Promise.all([
-          AllCourse.find({ _id: { $in: courseIds } }).lean(),
-          AffiliatedInstitute.find({ _id: { $in: affiliatedIds } }).lean(),
-          Company.find({ _id: { $in: companyIds } }).lean()
+        const [courses, departments, affiliatedInstitutes, companies] = await Promise.all([
+          courseIds.length > 0 ? AllCourse.find({ _id: { $in: courseIds } }).lean() : [],
+          departmentIds.length > 0 ? Department.find({ _id: { $in: departmentIds } }).lean() : [],
+          affiliatedIds.length > 0 ? AffiliatedInstitute.find({ _id: { $in: affiliatedIds } }).lean() : [],
+          companyIds.length > 0 ? Company.find({ _id: { $in: companyIds } }).lean() : []
         ]);
 
-        // Step 4: Enrich the course data with pricing information
-        const enrichedCourses = university.selectedCourses.map(univCourse => {
-          const courseDetail = courses.find(c => c._id.toString() === univCourse.courseId.toString());
+        // Step 4: Enrich the departments with course and pricing information
+        const enrichedDepartments = university.selectedDepartments ? university.selectedDepartments.map(department => {
+          const departmentDetail = departments.find(d => 
+            d && d._id && department.departmentId && 
+            d._id.toString() === department.departmentId.toString()
+          );
           
+          const enrichedCourses = department.selectedCourses ? department.selectedCourses.map(univCourse => {
+            const courseDetail = courses.find(c => 
+              c && c._id && univCourse.courseId && 
+              c._id.toString() === univCourse.courseId.toString()
+            );
+            
+            return {
+              ...courseDetail,
+              ...univCourse.toObject ? univCourse.toObject() : univCourse,
+              feeDetails: univCourse.feeDetails || {}
+            };
+          }) : [];
+
           return {
-            ...courseDetail,
-            pricing: {
-              semesterPrice: univCourse.semesterPrice,
-              annualPrice: univCourse.annualPrice,
-              oneTimePrice: univCourse.oneTimePrice,
-              totalAmount: univCourse.totalAmount,
-              loanAmount: univCourse.loanAmount
-            }
+            ...departmentDetail,
+            ...department.toObject ? department.toObject() : department,
+            selectedCourses: enrichedCourses
           };
-        });
+        }) : [];
 
         // Step 5: Prepare university response
         return {
           ...university,
-          selectedCourses: enrichedCourses,
+          selectedDepartments: enrichedDepartments,
           selectedApprovals: affiliatedInstitutes,
           selectedCompanies: companies
         };
@@ -603,16 +620,14 @@ exports.getMultipleUniversitiesData = async (collegeUrl) => {
         message: "Some universities not found",
         errors,
         data: universitiesData.filter(u => !u.error)
+      }
     }
-    }
-
-    console.log(universitiesData)
     return {
       message: "Universities data fetched successfully",
       data: universitiesData
     }
   } catch (error) {
     console.error('Error fetching universities data:', error);
-    return{ error: 'Internal server error' };
+    return { error: 'Internal server error' };
   }
 };

@@ -8,22 +8,32 @@ const University = require("../../admin section/admin-work/university/university
 const Testimonials = require('../../admin section/admin-work/testimonials/testimonialModel');
 const announcement = require("../../admin section/admin-work/announcement/announcementModel");
 const AffiliatedInstitute = require('../../admin section/admin-work/approvals/approvaModell');
+const Department = require("../../admin section/admin-work/course/model/Department");
 
+// app/api/admin/apiService.js
 exports.getAllCoursesData = async () => {
   try {
-    const [categories, courses] = await Promise.all([
+    const [categories, courses, departments] = await Promise.all([
       CourseCategories.find(),
-      AllCourse.find()
+      AllCourse.find(), // populate hata diya kyunki schema mein nahi hai
+      Department.find() // populate hata diya
     ]);
 
-    // 2. Map each category with its courses
     const categoriesWithCourses = categories.map(category => {
-      // Category name se filter karein
       const relatedCourses = courses.filter(
         course => course.courseCategory === category.name
-      );
+      ).map(course => ({
+        ...course.toObject(),
+        // Departments ko course ke hisaab se filter karenge
+        specializations: departments.filter(dept => 
+          dept.isActive && // sirf active departments
+          // Yahan aap course aur department ka relation set kar sakte hain
+          // Temporary logic - aap apne hisaab se change kar sakte hain
+          dept.name.toLowerCase() ||
+          course.courseName.toLowerCase().includes(dept.name.toLowerCase())
+        )
+      }));
 
-      // Return category + its courses
       return {
         ...category.toObject(),
         courses: relatedCourses
@@ -118,14 +128,15 @@ exports.getAllannouncementsData = async () => {
 };
 
 
+// backend route - searchUniversities function
 exports.searchUniversities = async (req) => {
   try {
-    const { categoryId, courseId } = req.query;
+    const { categoryId, courseId, specialization, page = 1, limit = 9 } = req.query;
     
     let universities = [];
 
     // If filters are provided
-    if (categoryId || courseId) {
+    if (categoryId || courseId || specialization) {
       let courseFilter = {};
       
       if (categoryId && categoryId.trim() !== '') {
@@ -137,33 +148,49 @@ exports.searchUniversities = async (req) => {
 
       const courses = await AllCourse.find(courseFilter);
       
-      if (courses.length === 0) return [];
+      if (courses.length === 0) return { universities: [], totalPages: 0, currentPage: 1 };
       
       const courseIds = courses.map(c => c._id);
-      universities = await University.find({
+      
+      let universityFilter = {
         'selectedCourses.courseId': { $in: courseIds }
-      });
+      };
+
+      // Add specialization filter if provided
+      if (specialization && specialization.trim() !== '') {
+        universityFilter['selectedCourses.specializations.name'] = { 
+          $regex: specialization, 
+          $options: 'i' 
+        };
+      }
+
+      universities = await University.find(universityFilter);
     } else {
       universities = await University.find({});
     }
 
-    if (universities.length === 0) return [];
+    // Pagination logic
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+    const startIndex = (pageNum - 1) * limitNum;
+    const endIndex = pageNum * limitNum;
+    const totalPages = Math.ceil(universities.length / limitNum);
+    
+    const paginatedUniversities = universities.slice(startIndex, endIndex);
 
-    // Get all affiliated institutes first (without filtering)
+    // Get all affiliated institutes
     const allAffiliatedInstitutes = await AffiliatedInstitute.find({}, { title: 1 });
     
-    // Create a map for quick lookup
     const affiliatedMap = {};
     allAffiliatedInstitutes.forEach(inst => {
       affiliatedMap[inst._id.toString()] = inst.title;
     });
 
     // Prepare response
-    const response = universities.map(university => {
+    const response = paginatedUniversities.map(university => {
       const universityAffiliatedNames = university.selectedApprovals
         .map(approval => {
           try {
-            // Try different ways to extract the ID
             let approvalId;
             
             if (approval && approval._id) {
@@ -193,7 +220,12 @@ exports.searchUniversities = async (req) => {
       };
     });
 
-    return response;
+    return {
+      universities: response,
+      totalPages,
+      currentPage: pageNum,
+      totalUniversities: universities.length
+    };
 
   } catch (error) {
     console.error("Error in searchUniversities:", error);

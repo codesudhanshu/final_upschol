@@ -6,11 +6,9 @@ const { uploadImage } = require('../../../services/s3.js')
 exports.createApproval = async (req) => {
   try {
     let imageUrl = '';
-    console.log(req.file)
     if (req.file) {
       const result = await uploadImage(req.file);
       imageUrl = result.Location;
-      console.log(imageUrl)
     }
 
     const approval = new AffiliatedInstitute({
